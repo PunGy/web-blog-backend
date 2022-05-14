@@ -1,0 +1,22 @@
+{
+  "name": "web-blog-backend",
+  "version": "0.0.1",
+  "description": "Backend for web blog",
+  "main": "main.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PunGy/web-blog-backend.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/PunGy/web-blog-backend/issues"
+  },
+  "homepage": "https://github.com/PunGy/web-blog-backend#readme",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "rest-library": "^0.0.8"
+  }
+}
