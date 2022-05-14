@@ -14,7 +14,7 @@
   },
   "homepage": "https://github.com/PunGy/web-blog-backend#readme",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node src/main.js"
   },
   "dependencies": {
     "rest-library": "^0.0.8"
