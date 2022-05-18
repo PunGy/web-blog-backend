@@ -1,17 +1,18 @@
-const http = require('http');
 const RestLib = require('rest-library');
 const { parseBodyMiddleware } = require('rest-library/utils.js')
-const { parseQuery } = require('rest-library/helpers.js')
+const cookie = require('cookie')
+const { v4: generateSID } = require('uuid')
 
 const app = new RestLib()
 
 const posts = []
-const users = [
-    { id: 1, name: 'John', password: '123' },
-]
+const users = []
+
+const sessions = new Map()
+const sessionIdCookieName = 'SID'
 
 const authorizedOnly = (ctx, next) => {
-    if (ctx.user) {
+    if (ctx.request.session.user) {
         next()
     } else {
         ctx.response.send({
@@ -20,10 +21,58 @@ const authorizedOnly = (ctx, next) => {
     }
 }
 
+const parseCookieMiddleware = (ctx, next) => {
+    const rawCookie = ctx.request.headers.cookie
+    ctx.request.cookie = {}
+    if (rawCookie) {
+        Object.assign(ctx.request.cookie, cookie.parse(rawCookie))
+    }
+    next()
+}
+
+const sessionMiddleware = (ctx, next) => {
+    if (ctx.request.session != null) {
+        next()
+        return
+    }
+
+    const sessionId = ctx.request.cookie[sessionIdCookieName]
+    if (sessionId == null) {
+        const session = { id: generateSID() }
+        sessions.set(session.id, session)
+        ctx.request.session = session
+
+        const cookieAge = new Date()
+        cookieAge.setFullYear(cookieAge.getFullYear() + 1)
+        ctx.response.setHeader('Set-Cookie', cookie.serialize(sessionIdCookieName, session.id, {
+            httpOnly: true,
+            expires: cookieAge,
+        }))
+    } else {
+        const session = sessions.get(sessionId)
+        if (session) {
+            ctx.request.session = session
+        } else {
+            ctx.response.setHeader('Set-Cookie', cookie.serialize(sessionIdCookieName, sessionId, {
+                httpOnly: true,
+                expires: new Date(0),
+            }))
+            ctx.response.send({
+                error: 'Invalid session',
+            }, 401)
+            return
+        }
+    }
+
+    next()
+}
+
 app.use(parseBodyMiddleware)
+app.use(parseCookieMiddleware)
+app.use(sessionMiddleware)
 app.use((ctx, next) => {
     if (ctx.request.query != null) {
-        const queryParams = parseQuery(ctx.request.query)
+        const { queryParams } = ctx.request
         const user = users.find(user => {
             if (user.name === queryParams.name && user.password === queryParams.password) {
                 return true
@@ -36,15 +85,66 @@ app.use((ctx, next) => {
     next()
 })
 
+
+app.post('/registration', (ctx, next) => {
+    const { body } = ctx.request
+
+    if (body.login == null || body.password == null) {
+        ctx.response.send({
+            error: 'Invalid body',
+        }, 400)
+        next()
+        return
+    }
+
+    const user = {
+        id: generateSID(),
+        login: body.login,
+        password: body.password,
+    }
+    users.push(user)
+    ctx.request.session.user = user
+    
+    ctx.response.send(user)
+    next()
+})
+
+app.post('/login', (ctx, next) => {
+    const { body } = ctx.request
+
+    if (body.login == null || body.password == null) {
+        ctx.response.send({
+            error: 'Invalid body',
+        }, 400)
+        next()
+        return
+    }
+
+    const user = users.find(user => {
+        if (user.login === body.login && user.password === body.password) {
+            return true
+        }
+    })
+
+    if (user) {
+        ctx.request.session.user = user
+        ctx.response.send(user)
+    } else {
+        ctx.response.send({
+            error: 'Invalid user data',
+        }, 401)
+    }
+
+    next()
+})
+
+
 app.get('/posts', (ctx, next) => {
     ctx.response.send(posts)
 
     next()
 })
 
-app.get('/post/:id', () => {
-
-})
 app.get('/post/:id', (ctx, next) => {
     const id = parseInt(ctx.request.params.id, 10)
     const post = posts.find(p => p.id === id)
