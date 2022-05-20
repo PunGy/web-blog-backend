@@ -1,92 +1,36 @@
 const RestLib = require('rest-library');
 const { parseBodyMiddleware } = require('rest-library/utils.js')
-const cookie = require('cookie')
-const { v4: generateSID } = require('uuid')
+
+const parseCookieMiddleware = require('./middleware/parseCookie.js')
+const onlyAuthenticatedMiddleware = require('./middleware/onlyAuthenticated.js')
+const authenticateMiddleware = require('./middleware/authenticate.js')
+const sessionMiddleware = require('./middleware/session.js')
+
+const connect = require('./database/connect.js')
+const { addUser, getUserByCredentials } = require('./database/users.js')
 
 const app = new RestLib()
 
 const posts = []
-const users = []
 
-const sessions = new Map()
-const sessionIdCookieName = 'SID'
+app.setErrorHandler((ctx, error) => {
+    console.error(error)
 
-const authorizedOnly = (ctx, next) => {
-    if (ctx.request.session.user) {
-        next()
-    } else {
-        ctx.response.send({
-            error: 'Unauthorized',
-        }, 401)
-    }
-}
-
-const parseCookieMiddleware = (ctx, next) => {
-    const rawCookie = ctx.request.headers.cookie
-    ctx.request.cookie = {}
-    if (rawCookie) {
-        Object.assign(ctx.request.cookie, cookie.parse(rawCookie))
-    }
-    next()
-}
-
-const sessionMiddleware = (ctx, next) => {
-    if (ctx.request.session != null) {
-        next()
-        return
-    }
-
-    const sessionId = ctx.request.cookie[sessionIdCookieName]
-    if (sessionId == null) {
-        const session = { id: generateSID() }
-        sessions.set(session.id, session)
-        ctx.request.session = session
-
-        const cookieAge = new Date()
-        cookieAge.setFullYear(cookieAge.getFullYear() + 1)
-        ctx.response.setHeader('Set-Cookie', cookie.serialize(sessionIdCookieName, session.id, {
-            httpOnly: true,
-            expires: cookieAge,
-        }))
-    } else {
-        const session = sessions.get(sessionId)
-        if (session) {
-            ctx.request.session = session
-        } else {
-            ctx.response.setHeader('Set-Cookie', cookie.serialize(sessionIdCookieName, sessionId, {
-                httpOnly: true,
-                expires: new Date(0),
-            }))
-            ctx.response.send({
-                error: 'Invalid session',
-            }, 401)
-            return
-        }
-    }
-
-    next()
-}
+    ctx.response.send({
+        error: error.message,
+    }, 500)
+})
 
 app.use(parseBodyMiddleware)
 app.use(parseCookieMiddleware)
 app.use(sessionMiddleware)
-app.use((ctx, next) => {
-    if (ctx.request.query != null) {
-        const { queryParams } = ctx.request
-        const user = users.find(user => {
-            if (user.name === queryParams.name && user.password === queryParams.password) {
-                return true
-            }
-        })
+app.use(authenticateMiddleware)
 
-        ctx.user = user
-    }
+/**
+ * ----------- AUTHENTICATION -----------
+ */
 
-    next()
-})
-
-
-app.post('/registration', (ctx, next) => {
+app.post('/registration', async (ctx, next) => {
     const { body } = ctx.request
 
     if (body.login == null || body.password == null) {
@@ -96,20 +40,21 @@ app.post('/registration', (ctx, next) => {
         next()
         return
     }
+    const db = await connect()
 
     const user = {
-        id: generateSID(),
         login: body.login,
         password: body.password,
     }
-    users.push(user)
-    ctx.request.session.user = user
+    await addUser(db, user)
+    
+    ctx.session.userId = user.id
     
     ctx.response.send(user)
     next()
 })
 
-app.post('/login', (ctx, next) => {
+app.post('/login', async (ctx, next) => {
     const { body } = ctx.request
 
     if (body.login == null || body.password == null) {
@@ -120,14 +65,11 @@ app.post('/login', (ctx, next) => {
         return
     }
 
-    const user = users.find(user => {
-        if (user.login === body.login && user.password === body.password) {
-            return true
-        }
-    })
+    const db = await connect()
+    const user = await getUserByCredentials(db, body.login, body.password)
 
     if (user) {
-        ctx.request.session.user = user
+        ctx.session.userId = user.id
         ctx.response.send(user)
     } else {
         ctx.response.send({
@@ -138,6 +80,21 @@ app.post('/login', (ctx, next) => {
     next()
 })
 
+app.post('/logout', (ctx, next) => {
+    delete ctx.session.userId
+    ctx.response.send({
+        message: 'Logout successful',
+    })
+    next()
+})
+
+/**
+ * ----------- END AUTHENTICATION -----------
+ */
+
+/**
+ * ----------- POSTS -----------
+ */
 
 app.get('/posts', (ctx, next) => {
     ctx.response.send(posts)
@@ -159,7 +116,7 @@ app.get('/post/:id', (ctx, next) => {
     next()
 })
 
-app.post('/post', authorizedOnly, (ctx, next) => {
+app.post('/post', onlyAuthenticatedMiddleware, (ctx, next) => {
     const post = ctx.request.body
     post.id = posts.length === 0 ? 0 : posts[posts.length - 1].id + 1
     posts.push(post)
@@ -169,7 +126,7 @@ app.post('/post', authorizedOnly, (ctx, next) => {
     next()
 })
 
-app.delete('/post/:id', authorizedOnly, (ctx, next) => {
+app.delete('/post/:id', onlyAuthenticatedMiddleware, (ctx, next) => {
     const id = parseInt(ctx.request.params.id, 10)
     const index = posts.findIndex(p => p.id === id)
     
@@ -187,7 +144,7 @@ app.delete('/post/:id', authorizedOnly, (ctx, next) => {
     next()
 })
 
-app.put('/post/:id', authorizedOnly, (ctx, next) => {
+app.put('/post/:id', onlyAuthenticatedMiddleware, (ctx, next) => {
     const id = parseInt(ctx.request.params.id, 10)
     const index = posts.findIndex(p => p.id === id)
     const post = ctx.request.body
@@ -204,6 +161,10 @@ app.put('/post/:id', authorizedOnly, (ctx, next) => {
 
     next()
 })
+
+/**
+ * ----------- END POSTS -----------
+ */
 
 app.use((ctx) => {
     console.log(`${ctx.request.method}: ${ctx.request.url}`)
