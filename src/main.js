@@ -8,10 +8,9 @@ const sessionMiddleware = require('./middleware/session.js')
 
 const connect = require('./database/connect.js')
 const { addUser, getUserByCredentials } = require('./database/users.js')
+const { addPost, deletePost, getPost, getPosts, updatePost } = require('./database/posts.js')
 
 const app = new RestLib()
-
-const posts = []
 
 app.setErrorHandler((ctx, error) => {
     console.error(error)
@@ -47,9 +46,9 @@ app.post('/registration', async (ctx, next) => {
         password: body.password,
     }
     await addUser(db, user)
-    
+
     ctx.session.userId = user.id
-    
+
     ctx.response.send(user)
     next()
 })
@@ -96,15 +95,21 @@ app.post('/logout', (ctx, next) => {
  * ----------- POSTS -----------
  */
 
-app.get('/posts', (ctx, next) => {
-    ctx.response.send(posts)
+app.get('/posts', async (ctx, next) => {
+    const db = await connect()
+
+    ctx.response.send(db.posts)
+
+    await getPosts(db)
 
     next()
 })
 
-app.get('/post/:id', (ctx, next) => {
-    const id = parseInt(ctx.request.params.id, 10)
-    const post = posts.find(p => p.id === id)
+app.get('/post/:id', async (ctx, next) => {
+    const db = await connect()
+    const postId = parseInt(ctx.request.params.id, 10)
+    const post = await getPost(db, postId)
+
     if (post) {
         ctx.response.send(post)
     } else {
@@ -112,26 +117,26 @@ app.get('/post/:id', (ctx, next) => {
             error: 'Post not found'
         }, 404)
     }
-
     next()
 })
 
-app.post('/post', onlyAuthenticatedMiddleware, (ctx, next) => {
+app.post('/post', onlyAuthenticatedMiddleware, async (ctx, next) => {
     const post = ctx.request.body
-    post.id = posts.length === 0 ? 0 : posts[posts.length - 1].id + 1
-    posts.push(post)
+    const db = await connect()
+
+    await addPost(db, post)
 
     ctx.response.send(post)
 
     next()
 })
 
-app.delete('/post/:id', onlyAuthenticatedMiddleware, (ctx, next) => {
-    const id = parseInt(ctx.request.params.id, 10)
-    const index = posts.findIndex(p => p.id === id)
-    
-    if (index !== -1) {
-        posts.splice(index, 1)
+app.delete('/post/:id', onlyAuthenticatedMiddleware, async (ctx, next) => {
+    const db = await connect()
+    const postId = parseInt(ctx.request.params.id, 10)
+    const post = await deletePost(db, postId)
+
+    if (post) {
         ctx.response.send({
             message: 'Post deleted',
         })
@@ -140,25 +145,22 @@ app.delete('/post/:id', onlyAuthenticatedMiddleware, (ctx, next) => {
             error: 'Post not found'
         }, 404)
     }
-
     next()
 })
 
-app.put('/post/:id', onlyAuthenticatedMiddleware, (ctx, next) => {
-    const id = parseInt(ctx.request.params.id, 10)
-    const index = posts.findIndex(p => p.id === id)
-    const post = ctx.request.body
+app.put('/post/:id', onlyAuthenticatedMiddleware, async (ctx, next) => {
+    const db = await connect()
+    const postId = parseInt(ctx.request.params.id, 10)
+    const postData = ctx.request.body
+    const data = await updatePost(db, postId, postData)
+    if (data !== -1) {
 
-    if (index !== -1) {
-        post.id = id
-        posts[index] = post
-        ctx.response.send(post)
+        ctx.response.send(postData)
     } else {
         ctx.response.send({
             error: 'Post not found'
         }, 404)
     }
-
     next()
 })
 
