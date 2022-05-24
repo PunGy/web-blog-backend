@@ -75,7 +75,6 @@ app.post('/login', async (ctx, next) => {
             error: 'Invalid user data',
         }, 401)
     }
-
     next()
 })
 
@@ -153,7 +152,7 @@ app.put('/post/:id', onlyAuthenticatedMiddleware, async (ctx, next) => {
     const postId = parseInt(ctx.request.params.id, 10)
     const postData = ctx.request.body
     const data = await updatePost(db, postId, postData)
-    if (data !== -1) {
+    if (data !== null) {
 
         ctx.response.send(postData)
     } else {
