@@ -24,7 +24,6 @@ const deleteUser = async (db, userId) => {
     return db.users.splice(index, 1)[0]
 }
 
-
 const updateUser = async (db, userId, userData) => {
     if (db.users == null) return null
     const index = db.users.findIndex((user) => user.id === userId)

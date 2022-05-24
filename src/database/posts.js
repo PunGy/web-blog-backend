@@ -28,7 +28,6 @@ const updatePost = async (db, postId, postData) => {
 
     if (index === -1) return null
     Object.assign(db.posts[index], postData)
-
     return postData
 }
 

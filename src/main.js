@@ -153,7 +153,6 @@ app.put('/post/:id', onlyAuthenticatedMiddleware, async (ctx, next) => {
     const postData = ctx.request.body
     const data = await updatePost(db, postId, postData)
     if (data !== null) {
-
         ctx.response.send(postData)
     } else {
         ctx.response.send({
