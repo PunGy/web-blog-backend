@@ -96,11 +96,8 @@ app.post('/logout', (ctx, next) => {
 
 app.get('/posts', async (ctx, next) => {
     const db = await connect()
-
-    ctx.response.send(db.posts)
-
-    await getPosts(db)
-
+    const posts = await getPosts(db)
+    ctx.response.send(posts)
     next()
 })
 
@@ -151,8 +148,8 @@ app.put('/post/:id', onlyAuthenticatedMiddleware, async (ctx, next) => {
     const db = await connect()
     const postId = parseInt(ctx.request.params.id, 10)
     const postData = ctx.request.body
-    const data = await updatePost(db, postId, postData)
-    if (data !== null) {
+    const updatedPost = await updatePost(db, postId, postData)
+    if (updatedPost) {
         ctx.response.send(postData)
     } else {
         ctx.response.send({
