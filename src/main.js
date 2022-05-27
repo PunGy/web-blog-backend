@@ -12,7 +12,7 @@ const { addPost, deletePost, getPost, getPosts, updatePost } = require('./databa
 
 const app = new RestLib()
 
-app.setErrorHandler((ctx, error) => {
+app.error((ctx, error) => {
     console.error(error)
 
     ctx.response.send({
@@ -21,6 +21,16 @@ app.setErrorHandler((ctx, error) => {
 })
 
 app.use(parseBodyMiddleware)
+app.use((ctx, next) => {
+    console.log(`${ctx.request.method}: ${ctx.request.url}`)
+    if (ctx.request.body != null) {
+        console.log(ctx.request.body, '\n')
+    } else {
+        console.log()
+    }
+
+    next()
+})
 app.use(parseCookieMiddleware)
 app.use(sessionMiddleware)
 app.use(authenticateMiddleware)
@@ -29,43 +39,33 @@ app.use(authenticateMiddleware)
  * ----------- AUTHENTICATION -----------
  */
 
-app.post('/registration', async (ctx, next) => {
+function userBodyValidation (ctx, next) {
     const { body } = ctx.request
 
     if (body.login == null || body.password == null) {
         ctx.response.send({
             error: 'Invalid body',
         }, 400)
-        next()
         return
     }
+
+    ctx.userBody = body
+    next()
+}
+app.post('/registration', userBodyValidation, async (ctx) => {
     const db = await connect()
 
-    const user = {
-        login: body.login,
-        password: body.password,
-    }
+    const user = ctx.userBody
     await addUser(db, user)
 
     ctx.session.userId = user.id
 
     ctx.response.send(user)
-    next()
 })
 
-app.post('/login', async (ctx, next) => {
-    const { body } = ctx.request
-
-    if (body.login == null || body.password == null) {
-        ctx.response.send({
-            error: 'Invalid body',
-        }, 400)
-        next()
-        return
-    }
-
+app.post('/login', userBodyValidation, async (ctx) => {
     const db = await connect()
-    const user = await getUserByCredentials(db, body.login, body.password)
+    const user = await getUserByCredentials(db, ctx.userBody.login, ctx.userBody.password)
 
     if (user) {
         ctx.session.userId = user.id
@@ -75,15 +75,13 @@ app.post('/login', async (ctx, next) => {
             error: 'Invalid user data',
         }, 401)
     }
-    next()
 })
 
-app.post('/logout', (ctx, next) => {
+app.post('/logout', (ctx) => {
     delete ctx.session.userId
     ctx.response.send({
         message: 'Logout successful',
     })
-    next()
 })
 
 /**
@@ -94,14 +92,27 @@ app.post('/logout', (ctx, next) => {
  * ----------- POSTS -----------
  */
 
-app.get('/posts', async (ctx, next) => {
+const postBodyValidation = (ctx, next) => {
+    const { body } = ctx.request
+
+    if (body.title == null || body.content == null) {
+        ctx.response.send({
+            error: 'Invalid body',
+        }, 400)
+        return
+    }
+
+    ctx.postBody = body
+    next()
+}
+
+app.get('/posts', async (ctx) => {
     const db = await connect()
     const posts = await getPosts(db)
     ctx.response.send(posts)
-    next()
 })
 
-app.get('/post/:id', async (ctx, next) => {
+app.get('/post/:id', async (ctx) => {
     const db = await connect()
     const postId = parseInt(ctx.request.params.id, 10)
     const post = await getPost(db, postId)
@@ -113,21 +124,18 @@ app.get('/post/:id', async (ctx, next) => {
             error: 'Post not found'
         }, 404)
     }
-    next()
 })
 
-app.post('/post', onlyAuthenticatedMiddleware, async (ctx, next) => {
-    const post = ctx.request.body
+app.post('/post', onlyAuthenticatedMiddleware, postBodyValidation, async (ctx) => {
+    const post = ctx.postBody
     const db = await connect()
 
     await addPost(db, post)
 
     ctx.response.send(post)
-
-    next()
 })
 
-app.delete('/post/:id', onlyAuthenticatedMiddleware, async (ctx, next) => {
+app.delete('/post/:id', onlyAuthenticatedMiddleware, async (ctx) => {
     const db = await connect()
     const postId = parseInt(ctx.request.params.id, 10)
     const post = await deletePost(db, postId)
@@ -141,36 +149,26 @@ app.delete('/post/:id', onlyAuthenticatedMiddleware, async (ctx, next) => {
             error: 'Post not found'
         }, 404)
     }
-    next()
 })
 
-app.put('/post/:id', onlyAuthenticatedMiddleware, async (ctx, next) => {
+app.put('/post/:id', onlyAuthenticatedMiddleware, postBodyValidation, async (ctx) => {
     const db = await connect()
     const postId = parseInt(ctx.request.params.id, 10)
-    const postData = ctx.request.body
-    const updatedPost = await updatePost(db, postId, postData)
+    const { postBody } = ctx
+    const updatedPost = await updatePost(db, postId, postBody)
+
     if (updatedPost) {
-        ctx.response.send(postData)
+        ctx.response.send(postBody)
     } else {
         ctx.response.send({
             error: 'Post not found'
         }, 404)
     }
-    next()
 })
 
 /**
  * ----------- END POSTS -----------
  */
-
-app.use((ctx) => {
-    console.log(`${ctx.request.method}: ${ctx.request.url}`)
-    if (ctx.request.body != null) {
-        console.log(ctx.request.body, '\n')
-    } else {
-        console.log()
-    }
-})
 
 app.listen(3000, () => {
     console.log('Server is running on port http://localhost:3000');
