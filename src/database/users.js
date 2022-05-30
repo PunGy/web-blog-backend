@@ -1,40 +1,41 @@
-const { v4: generateID } = require('uuid')
-
 const getUser = async (db, userId) => {
-    if (db.users == null) return null
-    return db.users.find(user => user.id === userId)
+    const r = await db.query('SELECT username, id FROM users WHERE id = $1', [userId])
+    return r.rows[0]
 }
 
 const getUsers = async (db) => {
-    return db.users
+    const r = await db.query('SELECT id, username FROM users')
+    return r.rows
 }
 
 const addUser = async (db, user) => {
-    if (db.users == null) return null
-    user.id = generateID()
-    db.users.push(user)
-    return user
+    const r = await db.query('INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id, username', [user.username, user.password])
+    const insertedUser = r.rows[0]
+
+    return insertedUser
 }
 
 const deleteUser = async (db, userId) => {
-    if (db.users === null) return null
-    const index = db.users.findIndex((user) => user.id === userId)
+    const r = await db.query('DELETE FROM users WHERE id = $1', [userId])
 
-    if (index === -1) return null
-    return db.users.splice(index, 1)[0]
+    return r.rowCount === 1
 }
 
 const updateUser = async (db, userId, userData) => {
-    if (db.users == null) return null
-    const index = db.users.findIndex((user) => user.id === userId)
-    if (index === -1) return null
-    Object.assign(db.users[index], userData)
-    return user
+    const rowsToUpdate = Object.keys(userData).map((key, index) => `${key} = $${index + 1}`)
+
+    const r = await db.query(
+        `UPDATE users SET ${rowsToUpdate.join(', ')} WHERE id = $${rowsToUpdate.length + 1} RETURNING id, username`,
+        Object.values(userData).concat(userId),
+    )
+
+    return r.rows[0]
 }
 
 const getUserByCredentials = async (db, login, password) => {
-    if (db.users == null) return null
-    return db.users.find(user => user.login === login && user.password === password)
+    const user = (await db.query('SELECT id, username FROM users WHERE username = $1 AND password = $2', [login, password])).rows[0]
+
+    return user
 }
 
 module.exports = {

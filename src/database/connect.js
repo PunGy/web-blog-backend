@@ -1,10 +1,19 @@
-const database = {
-    users: [],
-    posts: [],
-    sessions: [],
-}
-async function connect() {
-    return database
+const { Client } = require('pg')
+
+function memorize(fn) {
+    let cache = null
+    return (...args) => {
+        if (cache === null) {
+            return cache = fn(...args)
+        }
+        return cache
+    }
 }
 
-module.exports = connect
+async function connect() {
+    const client = new Client()
+    await client.connect()
+    return client
+}
+
+module.exports = memorize(connect)

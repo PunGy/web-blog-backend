@@ -1,3 +1,5 @@
+require('dotenv').config()
+
 const RestLib = require('rest-library');
 const { parseBodyMiddleware } = require('rest-library/utils.js')
 
@@ -42,7 +44,7 @@ app.use(authenticateMiddleware)
 function userBodyValidation (ctx, next) {
     const { body } = ctx.request
 
-    if (body.login == null || body.password == null) {
+    if (body.username == null || body.password == null) {
         ctx.response.send({
             error: 'Invalid body',
         }, 400)
@@ -55,9 +57,7 @@ function userBodyValidation (ctx, next) {
 app.post('/registration', userBodyValidation, async (ctx) => {
     const db = await connect()
 
-    const user = ctx.userBody
-    await addUser(db, user)
-
+    const user = await addUser(db, ctx.userBody)
     ctx.session.userId = user.id
 
     ctx.response.send(user)
@@ -65,7 +65,7 @@ app.post('/registration', userBodyValidation, async (ctx) => {
 
 app.post('/login', userBodyValidation, async (ctx) => {
     const db = await connect()
-    const user = await getUserByCredentials(db, ctx.userBody.login, ctx.userBody.password)
+    const user = await getUserByCredentials(db, ctx.userBody.username, ctx.userBody.password)
 
     if (user) {
         ctx.session.userId = user.id
@@ -173,3 +173,12 @@ app.put('/post/:id', onlyAuthenticatedMiddleware, postBodyValidation, async (ctx
 app.listen(3000, () => {
     console.log('Server is running on port http://localhost:3000');
 })
+
+const shutdownApplication = (signal) => async () =>
+{
+    const db = await connect()
+    await db.end()
+    console.log(`Application is turned off. SIGNAL: ${signal}`)
+}
+process.once('SIGINT', shutdownApplication('SIGINT'))
+process.once('SIGTERM', shutdownApplication('SIGTERM'))

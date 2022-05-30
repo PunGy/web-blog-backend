@@ -1,6 +1,7 @@
 const cookie = require('cookie')
-const { v4: generateSID } = require('uuid')
+const crypto = require('node:crypto')
 
+const generateSID = crypto.generateUUID
 const sessions = new Map()
 const sessionIdCookieName = 'SID'
 
