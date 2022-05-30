@@ -1,3 +1,5 @@
+-- Creating user for database
+
 -- Please specify password strong for blogclient user!
 CREATE ROLE blogclient WITH LOGIN CREATEDB PASSWORD 'strongpassword'; -- Creating a role which would be used by our application to connect to the database
 
