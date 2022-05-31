@@ -84,6 +84,10 @@ app.post('/logout', (ctx) => {
     })
 })
 
+app.get('/user', onlyAuthenticatedMiddleware, (ctx) => {
+    ctx.response.send(ctx.user)
+})
+
 /**
  * ----------- END AUTHENTICATION -----------
  */
@@ -127,7 +131,11 @@ app.get('/post/:id', async (ctx) => {
 })
 
 app.post('/post', onlyAuthenticatedMiddleware, postBodyValidation, async (ctx) => {
-    const post = ctx.postBody
+    const post = {
+        title: ctx.postBody.title,
+        content: ctx.postBody.content,
+        author_id: ctx.user.id,
+    }
     const db = await connect()
 
     await addPost(db, post)
@@ -155,6 +163,22 @@ app.put('/post/:id', onlyAuthenticatedMiddleware, postBodyValidation, async (ctx
     const db = await connect()
     const postId = parseInt(ctx.request.params.id, 10)
     const { postBody } = ctx
+
+    const postToUpdate = await getPost(db, postId)
+    if (!postToUpdate) {
+        ctx.response.send({
+            error: 'Post not found',
+        }, 404)
+        return
+    }
+
+    if (ctx.user.id !== postToUpdate.author_id && ctx.user.id !== 1) {
+        ctx.response.send({
+            error: 'You are not the author of this post',
+        }, 401)
+        return
+    }
+
     const updatedPost = await updatePost(db, postId, postBody)
 
     if (updatedPost) {

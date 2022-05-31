@@ -1,34 +1,37 @@
+const { getRowsToUpdate } = require('../helpers/database.js')
+
 const getPosts = async (db) => {
-    return db.posts
+    const r = await db.query('SELECT * FROM posts')
+    return r.rows
 }
 
 const getPost = async (db, postId) => {
-    if (db.posts == null) return null
-    return db.posts.find(post => post.id === postId)
+    const r = await db.query('SELECT * FROM posts WHERE id = $1', [postId])
+
+    return r.rows[0]
 }
 
 const addPost = async (db, post) => {
-    if (db.posts == null) return null
-    post.id = db.posts.length === 0 ? 0 : db.posts[db.posts.length - 1].id + 1
-    db.posts.push(post)
-    return post
+    const r = await db.query('INSERT INTO posts (title, content, author_id) VALUES ($1, $2, $3) RETURNING *', [post.title, post.content, post.author_id])
+
+    return r.rows[0]
 }
 
 const deletePost = async (db, postId) => {
-    if (db.posts == null) return null
-    const index = db.posts.findIndex((post) => post.id === postId)
+    const r = await db.query('DELETE FROM posts WHERE id = $1 RETURNING *', [postId])
 
-    if (index === -1) return null
-    return db.posts.splice(index, 1)[0]
+    return r.rows[0]
 }
 
 const updatePost = async (db, postId, postData) => {
-    if (db.posts == null) return null
-    const index = db.posts.findIndex((post) => post.id === postId)
+    const rowsToUpdate = getRowsToUpdate(postData)
 
-    if (index === -1) return null
-    Object.assign(db.posts[index], postData)
-    return postData
+    const r = await db.query(
+        `UPDATE posts SET ${rowsToUpdate.join(', ')} WHERE id = $${rowsToUpdate.length + 1} RETURNING *`,
+        Object.values(postData).concat(postId)
+    )
+
+    return r.rows[0]
 }
 
 
