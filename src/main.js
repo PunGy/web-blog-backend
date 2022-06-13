@@ -11,6 +11,7 @@ const sessionMiddleware = require('./middleware/session.js')
 const connect = require('./database/connect.js')
 const { addUser, getUserByCredentials } = require('./database/users.js')
 const { addPost, deletePost, getPost, getPosts, updatePost } = require('./database/posts.js')
+const { updateSession } = require('./database/sessions.js')
 
 const app = new RestLib()
 
@@ -41,9 +42,8 @@ app.use(authenticateMiddleware)
  * ----------- AUTHENTICATION -----------
  */
 
-function userBodyValidation (ctx, next) {
+async function userBodyValidation(ctx, next) {
     const { body } = ctx.request
-
     if (body.username == null || body.password == null) {
         ctx.response.send({
             error: 'Invalid body',
@@ -58,7 +58,7 @@ app.post('/registration', userBodyValidation, async (ctx) => {
     const db = await connect()
 
     const user = await addUser(db, ctx.userBody)
-    ctx.session.userId = user.id
+    await updateSession(db, ctx.session.id, { userId: user.id })
 
     ctx.response.send(user)
 })
@@ -68,7 +68,7 @@ app.post('/login', userBodyValidation, async (ctx) => {
     const user = await getUserByCredentials(db, ctx.userBody.username, ctx.userBody.password)
 
     if (user) {
-        ctx.session.userId = user.id
+        await updateSession(db, ctx.session.id, { userId: user.id })
         ctx.response.send(user)
     } else {
         ctx.response.send({
@@ -198,8 +198,7 @@ app.listen(3000, () => {
     console.log('Server is running on port http://localhost:3000');
 })
 
-const shutdownApplication = (signal) => async () =>
-{
+const shutdownApplication = (signal) => async () => {
     const db = await connect()
     await db.end()
     console.log(`Application is turned off. SIGNAL: ${signal}`)
